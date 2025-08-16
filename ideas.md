@@ -42,3 +42,51 @@ Click any key claim, and the system instantly renders its provenance graph. User
 - Which alternatives were rejected, and why?  
 
 We transform passive information consumption into active structural exploration. Users learn not just *what*, but *how* and *why*.  
+
+
+# For the conservation of essential knowledge 
+---
+
+### **Legacy Protocol: How to Turn a Departing Expert into an Immortal Digital Asset**
+
+#### **I. The Inevitable Crisis: The Ticking Time Bomb in Your Expert’s Mind**  
+Every company has an "Oracle" — that engineer or architect whose intuition and decades of experience form the lifeblood of your most complex project. In 5 years, they’ll retire.  
+
+When they leave, you won’t lose an employee—you’ll lose your most valuable, irreplaceable asset. This isn’t a risk—**it’s a guarantee**.  
+
+#### **II. The Solution: The Expert as an AI Trainer**  
+The solution: Don’t just record knowledge—**distill the thought process**. We transform the expert from a lecturer into a personal **AI trainer**, creating their "Digital Ghost"—an interactive archive of their cognition.  
+
+#### **III. Distillation Protocol: Git for Thought**  
+The process unfolds in a team-accessible space with defined roles:  
+
+1.  **`Commit`: The Source Truth**  
+    The expert articulates a key concept in their own words. This is the `master branch`—the source code of thought.  
+
+2.  **`Branch`: AI Apprentice Interpretations**  
+    Instantly, the AI generates "branches"—dozens of variations: simplifications, analogies, connections to known topics, even full explanations (like a student’s exam answer).  
+
+3.  **`Code Review`: Expert Validation**  
+    The expert doesn’t write—**they validate**. They review AI "branches" and rule:  
+    *   **`Approve`**: "Yes, this analogy holds. Meaning preserved."  
+    *   **`Request Changes`**: "No, this simplification distorts. You missed a critical nuance. Redo."  
+
+4.  **`Peer Review`: Clarity Assessment by Apprentices**  
+    Other team members ("apprentices") vote on **expert-approved** versions. They answer one question: "Which of these **correct** explanations is the **clearest**?"  
+
+5.  **`Merge`: Creating Legitimate Knowledge**  
+    A trust metric emerges. The explanation scoring highest on **[Correctness (Expert Approval) + Clarity (Apprentice Votes)]** gets "merged" into the core knowledge base.  
+
+#### **IV. Origin Tracking: A Passport for Every Claim**  
+Every "merged" knowledge unit receives an **immutable provenance passport**:  
+*   **Who** originated the thought (expert)  
+*   **How** the AI interpreted it  
+*   **How** the expert validated its correctness  
+*   **How** the team confirmed its clarity  
+
+#### **V. The Result: The Immortal Expert**  
+In 5 years, when the "Oracle" retires, they leave behind not dead documents, but an **AI model they personally trained**. Any employee can "converse" with their digital legacy, receiving answers the master would likely endorse.  
+
+We transform vulnerability into your greatest asset: a self-replicating system for intellectual capital transfer.  
+
+Let the expert retire. Their legacy keeps working for you. **Forever.**  
