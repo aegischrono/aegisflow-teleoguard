@@ -182,6 +182,84 @@ steps:
 *   **It is not a magic black box.** Every output is fully reproducible and traceable back to its foundational evidence and the contract that generated it.
 *   **It does not assume the final goal is correct.** `TeleoDiversity` and the `Q_hypothetical_failures` queries are designed to stress-test the declared goals themselves, allowing for strategic pivots based on evidence.
 
-Нужно создать техническую спецификацию, которая будет служить глубоким, детальным документом для инженеров, архитекторов и продакт-менеджеров. Она должна не только описывать "что" и "как", но и глубоко раскрывать "зачем", опираясь на твои философские и практические инсайты.
+Понял, нужно создать техническую спецификацию, которая будет служить глубоким, детальным документом для инженеров, архитекторов и продакт-менеджеров. Она должна не только описывать "что" и "как", но и глубоко раскрывать "зачем", опираясь на твои философские и практические инсайты. Я вытащу все технические детали из твоих заметок, структурирую их, добавлю недостающие концептуальные мосты и отвечу на твои ключевые вопросы.
 
-Я вытащу все технические детали из твоих заметок, структурирую их, добавлю недостающие концептуальные мосты и отвечу на твои ключевые вопросы.
+Отличная идея. Это именно то, что нужно профессионалам, чтобы быстро "пощупать" систему и понять ее структуру без необходимости читать многостраничный документ. Это концентрированная выжимка ключевых параметров, контрактов и инвариантов.
+
+---
+
+### **Aegis Framework: Architect's Cheat Sheet v1.0**
+
+This document provides a high-level summary of the key components, parameters, and invariants of the Aegis Framework. It is intended for architects, senior engineers, and technical leads to rapidly understand the system's structure and design principles.
+
+#### **I. AegisDB: The Epistemological Store**
+
+The database layer. Its primary role is to enforce truthfulness and traceability at the storage level.
+
+**`Artifact` (The Node)**
+*   **`kind`**: [Enum] Critical type information (`claim`, `number`, `decision`, `report`, `latent_risk`). Defines the artifact's behavior and validation rules.
+*   **`state`**: [State Machine] The core workflow state (`draft`, `resolved`, `stale`, `invalidated`). Transitions are managed by system triggers.
+*   **`metrics`**: [Struct] The core epistemological vector `{v, r}`. Validity (`v`) is calculated by the DB, risk (`r`) is often a model- or user-supplied input.
+*   **`units` & `temporal_validity`**: [String/TimestampTZ] Non-negotiable fields for numerical and time-sensitive data. `units` must map to a `UnitContract`. `valid_from`/`valid_to` define the data's relevance window.
+*   **`sources`**: [JSONB/Array] A mandatory, non-empty list of source URLs/citations. The core of the **Evidence-First** invariant.
+
+**`EvidenceItem` (The Proof)**
+*   **`artifact_id`**: [FK] The claim this item substantiates.
+*   **`level`**: [Enum] The quality of the evidence (`opinion`, `citation`, `replicated`, `unit_test`, `simulation`, `formal_proof`). This is a key input for the validity (`v`) calculation.
+*   **`source_hash`**: [String] A hash of the source content at the time of ingestion. Critical for detecting source drift and ensuring **reproducibility**.
+*   **`independence_score`**: [Float] A calculated metric (0-1) indicating how independent this source is from other evidence for the same artifact. Crucial for preventing **validity inflation**.
+
+**`JournalEvent` (The Immutable Log)**
+*   **`operation`**: [String] The name of the function/action performed (e.g., `extract_facts`, `assess_validity`).
+*   **`reproducibility_payload`**: [JSONB] The "magic" that ensures determinism. Must contain `model_id`, `prompt_hash`, and `seed` for any LLM-based operation.
+*   **`prev_hash`**: [String] A hash of the previous journal event, creating a verifiable chain of custody (blockchain-like).
+
+**`ValueConstraint` (The Guardrail)**
+*   **`severity`**: [Enum] `hard` (blocks transaction on failure) vs. `soft` (raises flag/penalty). The core of the **executable ethics** model.
+*   **`rule_expr`**: [String/Expression] The machine-readable rule to be evaluated against an artifact's content or metadata.
+*   **`scope`**: [String] Defines which `Artifact.kind` or tags this constraint applies to.
+
+---
+
+#### **II. AegisFlow: The Orchestration Engine**
+
+The process layer. It uses contracts to drive the workflow and a scheduler to prioritize actions.
+
+**`ECL-lite Contract` (The Plan)**
+*   **`end_anchors`**: [Array of Objects] A list of one or more `EndAnchor` definitions. The presence of multiple anchors enables **TeleoDiversity**.
+*   **`steps`**: [DAG] A directed acyclic graph of operations to be performed. The structure defines the flow of execution.
+*   **`asserts`**: [Array of Rules] Quality gates that must be passed at the end of the contract execution for the final artifact to be marked `resolved`.
+
+**`Scheduler (Ω)` (The Brain)**
+*   **`priority_function_weights`**: [Config Struct] The tunable weights for the utility function, e.g., `{w_voi, w_cod, w_rvoi, w_cost, w_novelty}`. This is the primary control knob for the system's strategic behavior.
+*   **`frontier`**: [State Object] The set of currently possible actions/steps the scheduler can choose from.
+*   **`budget_constraints`**: [Config] Limits on `cost` or `latency` that the scheduler must adhere to.
+
+---
+
+#### **III. TeleoGuard: The Strategic Alignment Layer**
+
+The validation layer that operates via reverse causality.
+
+**`EndAnchor` (The Goal)**
+*   **`target`**: [String] The `Artifact.kind` (e.g., `report`, `decision`) to which these rules apply.
+*   **`rules`**: [JSONB Object] The set of conditions for a successful outcome. Critical parameters include `min_v`, `max_r`, `min_alternatives`, `required_provenance_depth`, and `no_hard_vc_violations`.
+*   **`mode`**: [Enum] `strict`, `balanced`, `fast`. A preset that adjusts the "Escalation by Proximity" parameters.
+
+**`BackConstraint` (The Reverse Rule)**
+*   **`anchor_id`**: [FK] The `EndAnchor` that generated this constraint.
+*   **`applies_to`**: [Selector] A selector defining the scope, e.g., `stage:extraction` or `type:number`.
+*   **`rule_expr`**: [Expression] The rule to be enforced (e.g., `units IS NOT NULL`, `source.date >= '2024-01-01'`).
+
+**`IAG (Intent-Action Gap)` (The Drift Metric)**
+*   **`component_weights`**: [Config Struct] The weights for each factor in the IAG calculation, e.g., `{w_goal, w_vc, w_consistency, w_ea_margin, w_risk, w_reversibility}`. Allows tuning the "sensitivity" of the system's conscience.
+*   **`disposition_thresholds`**: [Config] The IAG score thresholds that trigger `soft-fail` vs. `hard-fail`.
+*   **`socratic_question_map`**: [Config] A mapping from failure types (e.g., `EA_MARGIN_DECREASED`) to specific, templated questions posed to the human operator.
+
+---
+
+#### **IV. System-Wide Concepts & Metrics**
+
+*   **`Resilience Score`**: [Float] A single metric (0-1) produced by the `Anti-System` after running a suite of adversarial tests (`Adversarial 30`). Measures the system's robustness against known failure modes.
+*   **`EA-PassRate`**: [Float] The percentage of workflows that pass their `EndAnchor` gates on the first attempt. The primary KPI for TeleoGuard's effectiveness.
+*   **`Cost-per-Valid-Fact`**: [Float] An economic metric tracking the resource cost (time, money) to produce a `resolved` artifact with `v` above a certain threshold.
