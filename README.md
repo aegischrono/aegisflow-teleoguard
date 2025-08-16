@@ -1,9 +1,9 @@
 ---
+# Status: Conceptual blueprint. No working implementation.
 
 # The Aegis Framework
 
 **Tagline:** _An answer with proof. Every step aligned with the end._
-  Status: Conceptual blueprint. No working implementation.
 ---
 
 ## 1. What is Aegis?
