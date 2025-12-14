@@ -321,3 +321,312 @@ TeleoGuard для промоушена делает:
     - всё "официальное" строится только на `scope='core' AND trust_level='trusted'`.
 
 ---
+
+
+Самый мощный апгрейд идеи — превратить текущую схему в **“псевдо‑AegisDB поверх Drive”**, где:
+
+- Drive = не просто папки, а **слабый, но формальный стор с метаданными и состояниями**,
+- NotebookLM = **интерактивный движок рассуждений**, который работает по протоколу,
+- внешние скрипты (минимальные) = **TeleoGuard/валидатор**, который строго решает, что попадёт в Core.
+
+Разложу по шагам, как сделать это более “идеально” и выжать максимум пользы.
+
+---
+
+## 1. Усиление идеи: Drive как “AegisDB-lite”, а не просто папка
+
+Сейчас у тебя CoreKB = папка `Aegis_Core_Truths` + протокол‑док.  
+Улучшение: ввести **явную модель состояния артефактов** через:
+
+1. **Структуру папок (уровень состояния)**
+2. **Именование файлов (метки роли/доверия)**
+3. **Фронтматтер в самих документах (микро‑метаданные в стиле AegisDB)**
+
+### 1.1. Папки как состояния артефактов
+
+Вместо одной `Aegis_Core_Truths` — мини‑pipeline:
+
+- `Aegis/Core` — только **прошедшие все проверки** (trusted).
+- `Aegis/Pending` — “Promotion Requests” из ноутбуков.
+- `Aegis/Rejected` — отклонённые (но храним как кейсы / для обучения).
+- `Aegis/Archive` — устаревшие версии ядра (снятые с продакшена).
+
+Так ты приближаешься к **state machine**:
+
+`Notebook → Pending → (Core | Rejected | Archive)`.
+
+### 1.2. Именование файлов как лёгкий schema
+
+Пример схемы имени:
+
+`[CORE][v1.2][TOPIC=Risk][OWNER=TeamA] Company_Risk_Policy.md`  
+`[PENDING][TOPIC=AI_Safety][SRC=Notebook:ProjectX] Summary_of_LLM_Risks.md`
+
+NotebookLM видит заголовок файла → ты в протоколе объясняешь:
+
+> “Парси метки в квадратных скобках как метаданные: статус, версию, тему, владельца”.
+
+Это даёт:
+
+- модели — явные ориентиры, что `[CORE]` важнее `[PENDING]`,
+- скриптам — удобный способ вытащить статусы без сложной БД.
+
+### 1.3. Фронтматтер внутри документов
+
+Самое сильное улучшение: добавить **YAML‑фронтматтер в начале каждого ключевого markdown‑дока**:
+
+```markdown
+---
+aegis_id: claim_cpu_risk_001
+aegis_scope: core          # core / notebook
+aegis_trust: trusted       # trusted / candidate / rejected
+aegis_sources:
+  - url: https://...
+    type: citation
+  - doc_id: core_policy_v1
+    type: internal
+aegis_validity: 0.86
+aegis_risk: 0.2
+aegis_alternatives:
+  - claim_cpu_risk_002
+---
+Текст утверждения, объяснения, таблицы и т.д.
+```
+
+Плюсы:
+
+- NotebookLM читает это как обычный текст → можно **научить его уважать эти поля** в `00_AEGIS_PROTOCOL`.
+- Внешний скрипт легко парсит это → у тебя появляется **микро‑AegisDB поверх файловой системы**, без отдельного Postgres.
+
+---
+
+## 2. Улучшенный протокол внутри NotebookLM
+
+Текущий `Aegis System Prompt` — уже хороший костяк. Его можно сделать ближе к TeleoGuard и Aegis‑стилю.
+
+### 2.1. Разделить роли: Core vs Notebook‑вью
+
+Добавь в протокол:
+
+- жёсткое различение:
+  - `[CORE]` / `aegis_scope: core` / `aegis_trust: trusted`
+  - vs всё остальное (`candidate` из Notebook или внешних файлов)
+- явный приоритет:
+
+> “Если информация из `candidate` противоречит `core`, считай `core` доминирующим, пока отдельным решением не будет изменён Core”.
+
+### 2.2. Обязательные режимы взаимодействия (команды)
+
+Определи фиксированные “режимы”, чтобы NotebookLM вёл себя детерминированнее:
+
+1. `Mode: EXPLAIN` — обычные объяснения.
+2. `Mode: DIFFERENCE` — сравнить Candidate vs Core, вывести конфликты.
+3. `Mode: PROMOTION_PREP` — подготовка структуры Promotion Request.
+4. `Mode: TELEO_CHECK` — оценка, помогает ли новый факт финальной цели.
+
+Пример в протокол:
+
+> - When user writes: `PROMOTION_PREP: <…>`  
+>   you MUST respond in STRICT JSON with fields: `claim`, `evidence`, `core_support`, `core_conflicts`, `teleo_score`, `risk_notes`.
+
+Это даёт:
+
+- формат, удобный и для человека, и для внешнего скрипта,
+- зачаток **EndAnchor/IAG** прямо в ответе модели.
+
+---
+
+## 3. Двухноутбучная схема: Аналитика vs Ревью
+
+Сейчас у тебя один Notebook = и кухня, и суд.
+
+Можно сделать ближе к Aegis:
+
+1. **Analysis Notebook** (`ProjectX_Analysis`):
+   - подключены:
+     - нужные куски Core,
+     - новые “грязные” источники,
+     - `00_AEGIS_PROTOCOL_ANALYST`.
+   - Здесь:
+     - задаются вопросы,
+     - рождаются инсайты,
+     - готовятся черновые Promotion Requests.
+
+2. **Review Notebook** (`ProjectX_Review`):
+   - подключены:
+     - только Core‑файлы,
+     - папка `Aegis/Pending` (кандидаты),
+     - `01_AEGIS_PROTOCOL_REVIEWER` с жёстким тоном (“ты — аудитор/TeleoGuard”).
+   - Задача:
+     - проверить каждый `Promotion Request`,
+     - явно классифицировать: `approve` / `reject` / `needs_more_evidence`,
+     - сформировать финальный текст для Core.
+
+Плюсы:
+
+- логическое разделение ролей:
+  - одно “Я” — творит и исследует,
+  - другое — сомневается и режет.
+- ближе к **TeleoGuard pipeline**:
+  - в Review‑ноутбуке можно жёстче ограничить стиль:
+    - только структурированные ответы,
+    - только работа с `[CORE]` + `[PENDING]`,
+    - минимум галлюцинаций.
+
+---
+
+## 4. Улучшенный Promotion Pipeline (Airlock v2)
+
+Сделаем твой шлюз более “Aegis‑образным”.
+
+### 4.1. Что такое Promotion Request v2
+
+Определи целевой формат как **структурированный JSON или Markdown‑блок**:
+
+```markdown
+[PROMOTION_REQUEST]
+id: prjX_claim_017
+claim: "Внедрение политики X снижает риск Y на 30–40%."
+topic: "Risk_Management"
+
+evidence:
+  core_support:
+    - doc: "[CORE] Risk_Baseline_v1"
+      excerpt: "..."
+      alignment: "consistent"
+  new_sources:
+    - doc: "New_Study_2024.pdf"
+      url: "https://..."
+      summary: "..."
+      reliability: 0.7
+
+analysis:
+  conflicts_with_core:
+    - doc: "[CORE] Old_Policy_2019"
+      type: "soft_conflict"
+      comment: "Старая политика не учитывала новые данные"
+  teleology:
+    goal: "Reduce overall risk without breaking compliance"
+    effect_on_goal: "positive"
+    uncertainties: ["no data for region Z"]
+
+scores:
+  validity: 0.78
+  risk: 0.25
+  teleo_score: 0.8   # Does it serve the end goals?
+  iag_flags: ["requires_update_of_core_doc: Old_Policy_2019"]
+[/PROMOTION_REQUEST]
+```
+
+- NotebookLM в Analysis Notebook **генерирует именно такую структуру**.
+- Внешний скрипт/человек может легко её прочитать.
+
+### 4.2. Автоматизированный TeleoGuard‑скрипт
+
+Минимальный Python‑скрипт, который:
+
+1. Раз в N минут / по кнопке:
+   - смотрит папку `Aegis/Pending`,
+   - ищет документы с блоками `[PROMOTION_REQUEST]…`.
+
+2. Для каждого:
+
+   - парсит JSON/Markdown‑структуру,
+   - проверяет правила:
+     - `validity >= min_threshold`?
+     - нет ли критических `conflicts_with_core` без пометки “resolved”?
+     - `teleo_score >= X`?
+
+3. По результату:
+
+   - если всё ОК →:
+     - создаёт/обновляет Markdown в `Aegis/Core` с нужным фронтматтером (trusted),
+     - помечает PR как `applied` (дописать в него `aegis_trust: trusted` или переносит в `Archive`/`Rejected`).
+   - если НЕ ОК →:
+     - перемещает документ в `Aegis/Rejected`,
+     - при необходимости формирует новый файл “Review_Feedback.md”.
+
+Так ты реально получаешь:
+
+- **формальный шлюз (EndAnchor/TeleoGuard)**,
+- **“только через него можно попасть в Core”**.
+
+---
+
+## 5. Как выжать ещё больше пользы из NotebookLM
+
+### 5.1. Шаблоны промтов как “маленькая DSL”
+
+Сделай отдельный файл `99_AEGIS_CHEATSHEET` с примерами:
+
+- `PROMPT: "COMPARE_CORE_AND_NEW on topic X"`
+- `PROMPT: "PROMOTION_PREP for conclusion Y"`
+- `PROMPT: "TELEO_CHECK relative to goal Z"`
+
+Это:
+
+- даёт пользователю “меню команд”,
+- уменьшает креативный шум в промтах,
+- увеличивает предсказуемость поведения NotebookLM.
+
+### 5.2. “Goal Doc” для каждого проекта
+
+Для каждого Project Notebook создай:
+
+- документ `PROJECT_GOAL.yaml` (или markdown с YAML‑блоком):
+
+```yaml
+project_id: ProjectX
+end_anchor:
+  description: "Сформировать политику по рискам ИИ для компании"
+  rules:
+    min_validity: 0.8
+    no_conflict_with:
+      - "[CORE] Company_Values"
+      - "[CORE] Legal_Baseline"
+    must_cover_topics:
+      - "Data_Privacy"
+      - "Model_Robustness"
+      - "Incident_Response"
+```
+
+И в `Aegis Protocol` пропиши:
+
+> “При подготовке итоговых отчётов и Promotion Requests ты обязан сверяться с `PROJECT_GOAL` и явно говорить, какие правила выполняются/нарушаются”.
+
+Это максимально приближает тебя к настоящему **EndAnchor / BackConstraints** в рамках блокнота.
+
+---
+
+## 6. Чем v2 лучше изначальной схемы
+
+1. **Не просто папка Core, а мягкая AegisDB:**
+   - фронтматтер + имена файлов + папки‑состояния ≈ модель артефактов/инвариантов без отдельной БД.
+
+2. **Чёткий пайплайн состояний:**
+   - Notebook → Pending → Review → Core/Rejected/Archive  
+   вместо “на глаз перенесли файл в Core”.
+
+3. **Сильнее TeleoGuard:**
+   - Teleo‑оценки и конфликты явно фиксируются в структурированном блоке,
+   - есть внешний/скриптовый Gatekeeper.
+
+4. **Ролевая чистота:**
+   - Analysis Notebook = творчество, Deep Research,
+   - Review Notebook + скрипт = “суд”, строгость, телология.
+
+5. **Лучшая интеграция с человеком:**
+   - менеджер/архивариус получает не просто текст, а:
+     - claim,
+     - evidence,
+     - конфликты,
+     - teleo‑оценки,
+     - понятную структуру для решения.
+
+6. **Низкий порог реализации:**
+   - всё можно сделать:
+     - в рамках Google Drive + NotebookLM + один маленький Python/Apps Script,
+     - без тяжёлых бэкендов и БД.
+
+---
+
